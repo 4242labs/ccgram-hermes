@@ -1,0 +1,23 @@
+[project]
+name = "ccgram-hermes"
+version = "0.1.0"
+description = "Hermes Agent as a first-class ccgram agent: replies, tool calls, live status, permission prompts, plus a global /silence."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.14"
+dependencies = ["ccgram==4.12.3"]
+
+[project.scripts]
+ccgram-hermes = "ccgram_hermes.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=9.1.1", "pytest-asyncio>=1.4.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
