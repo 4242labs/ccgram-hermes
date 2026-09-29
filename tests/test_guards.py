@@ -3,8 +3,11 @@ import json
 import ccgram
 import ccgram.main as ccmain
 import pytest
+from ccgram import bootstrap
 from ccgram.handlers import registry as hr
 from ccgram.handlers.interactive import interactive_ui as iui
+from ccgram.handlers.text import text_handler as th
+from ccgram.multiplexer import herdr
 from telegram.ext import ExtBot
 
 from ccgram_hermes import cli, hermes, patches
@@ -23,6 +26,9 @@ BREAK = {
     "5 create_bot": lambda mp: mp.setattr(ccmain, "create_bot", object(), raising=False),
     "6 prompt capture": lambda mp: mp.setattr(iui, "_capture_interactive_content", lambda *a: None),
     "7 Bot._post": lambda mp: mp.setattr(ExtBot, "_post", _fake_post, raising=False),
+    "8 auto topics": lambda mp: mp.setattr(bootstrap, "_handle_new_window", object()),
+    "9 session picker": lambda mp: mp.setattr(th, "build_window_picker", object()),
+    "10 agent titles": lambda mp: mp.setattr(herdr.HerdrManager, "_live_ref", lambda self: None),
 }
 
 

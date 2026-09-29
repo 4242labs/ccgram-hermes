@@ -1,4 +1,4 @@
-"""The seven runtime patches onto ccgram. Every target is checked before any is applied."""
+"""The ten runtime patches onto ccgram. Every target is checked before any is applied."""
 
 from __future__ import annotations
 
@@ -18,10 +18,14 @@ def _guards() -> list[tuple[str, Callable[[], bool]]]:
     import ccgram
     import ccgram.main as main
     import ccgram.providers as P
-    from ccgram import bot
+    from ccgram import bootstrap, bot
     from ccgram.handlers import agent_command as ac
     from ccgram.handlers import registry as hr
     from ccgram.handlers.interactive import interactive_ui as iui
+    from ccgram.handlers.text import text_handler as th
+    from ccgram.handlers.topics import directory_browser as db
+    from ccgram.handlers.topics import topic_orchestration as to
+    from ccgram.multiplexer import herdr
     from ccgram.window_state_ports import identity_state
     from telegram import Bot
     from telegram.ext import ExtBot
@@ -40,6 +44,14 @@ def _guards() -> list[tuple[str, Callable[[], bool]]]:
             and inspect.getsource(iui).count("_capture_interactive_content(") == 2
             and callable(iui.get_window_provider) and callable(identity_state.get_session_id)),
         ("7 Bot._post", lambda: "_post" not in ExtBot.__dict__ and inspect.iscoroutinefunction(Bot._post)),
+        ("8 auto topics", lambda: bootstrap._handle_new_window is to.handle_new_window
+            and "target_user_id" in inspect.signature(to.handle_new_window).parameters
+            and callable(to._is_window_already_bound)),
+        ("9 session picker", lambda: th.build_window_picker is db.build_window_picker
+            and "build_window_picker(unbound)" in inspect.getsource(th)),
+        ("10 agent titles", lambda: "_parse_live_record(agent)" in inspect.getsource(herdr._parse_agent_records)
+            and isinstance(herdr.HerdrManager.__dict__.get("_live_ref"), staticmethod)
+            and inspect.signature(herdr.HerdrManager._live_ref).parameters.keys() >= {"record", "label"}),
     ]
 
 
@@ -92,17 +104,24 @@ def apply() -> None:
         alerts.alert("guard", "ccgram-hermes stopped. Changed in ccgram: " + ", ".join(fails), wait=True)
         sys.exit("ccgram-hermes: patch guard failed: " + ", ".join(fails))
 
+    import dataclasses
+
     import ccgram.providers as P
-    from ccgram import bot
+    from ccgram import bootstrap, bot
     from ccgram.handlers import agent_command as ac
     from ccgram.handlers import registry as hr
     from ccgram.handlers.interactive import interactive_ui as iui
+    from ccgram.handlers.text import text_handler as th
+    from ccgram.handlers.topics import directory_browser as db
+    from ccgram.handlers.topics import topic_orchestration as to
+    from ccgram.multiplexer import herdr
+    from ccgram.multiplexer.topic_mapping import format_agent_topic_prefix
     from ccgram.utils import ccgram_dir
     from ccgram.window_state_ports import identity_state
     from telegram import Bot, Update
     from telegram.ext import TypeHandler
 
-    from . import hermes, silence
+    from . import hermes, silence, topics
     from .provider import HermesProvider
 
     # 1
@@ -147,6 +166,32 @@ def apply() -> None:
 
     # 7
     Bot._post = silence.gated_post
+
+    # 8
+    to.handle_new_window = bootstrap._handle_new_window = topics.on_request(to.handle_new_window)
+
+    # 9
+    th.build_window_picker = db.build_window_picker = topics.picker
+
+    # 10
+    parse = herdr._parse_live_record
+    live_ref = herdr.HerdrManager._live_ref
+
+    def _parse_live_record(record):
+        got = parse(record)
+        if got is not None and (title := topics.agent_title(record)):
+            topics.titles[got.target_id] = title
+        return got
+
+    def _live_ref(record, label, *, adoptable=True):
+        ref = live_ref(record, label, adoptable=adoptable)
+        title = topics.titles.get(record.target_id)
+        if not title:
+            return ref
+        return dataclasses.replace(ref, window_name=format_agent_topic_prefix(title, "", provider=record.composite.agent))
+
+    herdr._parse_live_record = _parse_live_record
+    herdr.HerdrManager._live_ref = staticmethod(_live_ref)
 
     _applied = True
     hermes.check_version()

@@ -1,4 +1,4 @@
-"""/silence: one global, fail-closed mute. Nothing is buffered or replayed."""
+"""/silence: one global, fail-closed mute that also closes every session topic. Nothing is replayed."""
 
 from __future__ import annotations
 
@@ -33,8 +33,26 @@ def set_on(on: bool) -> None:
         p.unlink(missing_ok=True)
 
 
+async def close_topics(bot) -> int:
+    """Unbind every topic, sessions keep running, then delete it from Telegram."""
+    from ccgram.handlers.cleanup import clear_topic_state
+    from ccgram.telegram_client import PTBTelegramClient
+    from ccgram.thread_router import thread_router
+
+    client = PTBTelegramClient(bot)
+    closed = 0
+    for user_id, chat_id, thread_id, window_id in list(thread_router.iter_thread_bindings_with_chat()):
+        chat = chat_id if chat_id is not None else thread_router.resolve_chat_id(user_id, thread_id)
+        with suppress(Exception):
+            await clear_topic_state(user_id, thread_id, client, None, window_id, chat, window_dead=False)
+        thread_router.unbind_thread(user_id, thread_id, chat_id=chat_id)
+        with suppress(TelegramError):
+            closed += bool(await bot.delete_forum_topic(chat, thread_id))
+    return closed
+
+
 def label() -> str:
-    return "Silence is on. Only /silence replies." if is_on() else "Silence is off."
+    return "Silence is on. Session topics are closed. Only /silence replies." if is_on() else "Silence is off."
 
 
 def _keyboard() -> InlineKeyboardMarkup:
@@ -88,6 +106,8 @@ async def gate(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
                     await msg.reply_text(label())
                 else:
                     await msg.reply_text(label(), reply_markup=_keyboard())
+            if is_on() and (cq or arg == "on"):
+                await close_topics(_context.bot)
         finally:
             _replying.reset(token)
         raise ApplicationHandlerStop

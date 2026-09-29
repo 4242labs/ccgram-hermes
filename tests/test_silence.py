@@ -44,6 +44,11 @@ def posted(monkeypatch):
         return True
 
     monkeypatch.setattr(silence, "_orig_post", post)
+
+    async def close(bot):
+        calls.append(("close", bot))
+
+    monkeypatch.setattr(silence, "close_topics", close)
     return calls
 
 
@@ -53,8 +58,9 @@ async def test_silence(posted):
 
     u = upd("/silence on")
     with pytest.raises(ApplicationHandlerStop):
-        await silence.gate(u, None)
+        await silence.gate(u, SimpleNamespace(bot="B"))
     assert silence.is_on() and u.message.replies[0][0].startswith("Silence is on")
+    assert posted.pop() == ("close", "B")
 
     with pytest.raises(ApplicationHandlerStop):
         await silence.gate(upd("hello"), None)
@@ -100,3 +106,29 @@ async def test_no_replay(posted):
     silence.set_on(False)
     await silence.gated_post(bot, "sendMessage", {"text": "new"})
     assert posted == ["sendMessage"]
+
+
+async def test_close_topics(monkeypatch):
+    from ccgram.handlers import cleanup
+    from ccgram.thread_router import thread_router
+
+    binds = [(42, None, 7, "w1"), (42, 99, 8, "w2")]
+    unbound, deleted = [], []
+    monkeypatch.setattr(thread_router, "iter_thread_bindings_with_chat", lambda: iter(binds))
+    monkeypatch.setattr(thread_router, "resolve_chat_id", lambda u, t: 42)
+    monkeypatch.setattr(thread_router, "unbind_thread", lambda u, t, chat_id=None: unbound.append((t, chat_id)))
+
+    async def clear(*_a, **_kw):
+        raise RuntimeError("status send failed")
+
+    monkeypatch.setattr(cleanup, "clear_topic_state", clear)
+
+    class B:
+        async def delete_forum_topic(self, chat, thread):
+            deleted.append((chat, thread))
+            if thread == 8:
+                raise TelegramError("TOPIC_ID_INVALID")
+            return True
+
+    assert await silence.close_topics(B()) == 1
+    assert unbound == [(7, None), (8, 99)] and deleted == [(42, 7), (99, 8)]
