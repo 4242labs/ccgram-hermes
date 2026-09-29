@@ -10,7 +10,7 @@ Gemini, Pi and a few more. This plugin adds Hermes: its replies, tool calls and 
 back to the topic, its live status shows, and its approval prompts arrive as buttons you can tap.
 It also adds `/silence`, one switch that mutes the whole bot.
 
-It never edits ccgram. It installs beside it, patches seven known spots at startup, and checks each
+It never edits ccgram. It installs beside it, patches ten known spots at startup, and checks each
 one first. If ccgram has changed underneath it, it warns you in Telegram and refuses to start rather
 than run half-working.
 
@@ -32,11 +32,14 @@ ccgram's own `/upgrade` replies with that line instead of running.
 
 ## Using it
 
-- Start `hermes` in a pane ccgram watches. The topic picks it up like any other agent.
+- Start `hermes` in a pane ccgram watches. Sessions no longer get topics on their own.
+- Send a message in a new topic to get a numbered list of running sessions. Tap a number to open one there.
+- Topics and the list use each agent's own title, not the workspace name.
 - `/agent` and `/provider` list `hermes`. `/resume` lists your Hermes sessions for that folder.
 - `/commands` lists Hermes' own slash commands.
 - An approval prompt shows one button per choice. A tap on a prompt already answered does nothing.
-- `/silence on` stops every message and edit, `/silence off` resumes. Nothing sent while silent is
+- `/silence on` stops every message and edit, and deletes every session topic. The sessions keep
+  running. `/silence off` resumes, and you pick sessions again. Nothing sent while silent is
   replayed. Bare `/silence` shows On and Off buttons.
 
 ## How it works
