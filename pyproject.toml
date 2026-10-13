@@ -6,7 +6,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.14"
-dependencies = ["ccgram==4.12.3"]
+dependencies = ["ccgram==4.16.0"]
 
 [project.scripts]
 ccgram-hermes = "ccgram_hermes.cli:main"
